@@ -61,7 +61,7 @@
             'plugins/table.core.js',
             'plugins/table.cmds.js',
             'plugins/table.action.js',
-//            'plugins/contextmenu.js',
+            'plugins/contextmenu.js',
             'plugins/basestyle.js',
             'plugins/elementpath.js',
             'plugins/formatmatch.js',
