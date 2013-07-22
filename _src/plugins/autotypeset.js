@@ -22,7 +22,7 @@ UE.plugins['autotypeset'] = function(){
             removeEmptyNode : false,         // 去掉空节点
             //可以去掉的标签
             removeTagNames : utils.extend({div:1},dtd.$removeEmpty),
-            indent : false,                  // 行首缩进
+            indent : true,                  // 行首缩进
             indentValue : '2em'             //行首缩进的大小
     }});
     var me = this,
