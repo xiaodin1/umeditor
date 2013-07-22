@@ -204,7 +204,8 @@
                 container = document.getElementById(container);
             }
             if (container) {
-                me.initialCont(container);
+                container = me.initialCont(container);
+                container.className += ' edui-body-container';
 
                 if(options.initialFrameWidth){
                     options.minFrameWidth = options.initialFrameWidth
