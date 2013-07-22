@@ -54,6 +54,103 @@
         return range;
     }
 
+    function execContentsAction(range, action) {
+        //调整边界
+        //range.includeBookmark();
+        var start = range.startContainer,
+            end = range.endContainer,
+            startOffset = range.startOffset,
+            endOffset = range.endOffset,
+            doc = range.document,
+            frag = doc.createDocumentFragment(),
+            tmpStart, tmpEnd;
+        if (start.nodeType == 1) {
+            start = start.childNodes[startOffset] || (tmpStart = start.appendChild(doc.createTextNode('')));
+        }
+        if (end.nodeType == 1) {
+            end = end.childNodes[endOffset] || (tmpEnd = end.appendChild(doc.createTextNode('')));
+        }
+        if (start === end && start.nodeType == 3) {
+            frag.appendChild(doc.createTextNode(start.substringData(startOffset, endOffset - startOffset)));
+            //is not clone
+            if (action) {
+                start.deleteData(startOffset, endOffset - startOffset);
+                range.collapse(true);
+            }
+            return frag;
+        }
+        var current, currentLevel, clone = frag,
+            startParents = domUtils.findParents(start, true), endParents = domUtils.findParents(end, true);
+        for (var i = 0; startParents[i] == endParents[i];) {
+            i++;
+        }
+        for (var j = i, si; si = startParents[j]; j++) {
+            current = si.nextSibling;
+            if (si == start) {
+                if (!tmpStart) {
+                    if (range.startContainer.nodeType == 3) {
+                        clone.appendChild(doc.createTextNode(start.nodeValue.slice(startOffset)));
+                        //is not clone
+                        if (action) {
+                            start.deleteData(startOffset, start.nodeValue.length - startOffset);
+                        }
+                    } else {
+                        clone.appendChild(!action ? start.cloneNode(true) : start);
+                    }
+                }
+            } else {
+                currentLevel = si.cloneNode(false);
+                clone.appendChild(currentLevel);
+            }
+            while (current) {
+                if (current === end || current === endParents[j]) {
+                    break;
+                }
+                si = current.nextSibling;
+                clone.appendChild(!action ? current.cloneNode(true) : current);
+                current = si;
+            }
+            clone = currentLevel;
+        }
+        clone = frag;
+        if (!startParents[i]) {
+            clone.appendChild(startParents[i - 1].cloneNode(false));
+            clone = clone.firstChild;
+        }
+        for (var j = i, ei; ei = endParents[j]; j++) {
+            current = ei.previousSibling;
+            if (ei == end) {
+                if (!tmpEnd && range.endContainer.nodeType == 3) {
+                    clone.appendChild(doc.createTextNode(end.substringData(0, endOffset)));
+                    //is not clone
+                    if (action) {
+                        end.deleteData(0, endOffset);
+                    }
+                }
+            } else {
+                currentLevel = ei.cloneNode(false);
+                clone.appendChild(currentLevel);
+            }
+            //如果两端同级，右边第一次已经被开始做了
+            if (j != i || !startParents[i]) {
+                while (current) {
+                    if (current === start) {
+                        break;
+                    }
+                    ei = current.previousSibling;
+                    clone.insertBefore(!action ? current.cloneNode(true) : current, clone.firstChild);
+                    current = ei;
+                }
+            }
+            clone = currentLevel;
+        }
+        if (action) {
+            range.setStartBefore(!endParents[i] ? endParents[i - 1] : !startParents[i] ? startParents[i - 1] : endParents[i]).collapse(true);
+        }
+        tmpStart && domUtils.remove(tmpStart);
+        tmpEnd && domUtils.remove(tmpEnd);
+        return frag;
+    }
 
     /**
      * @name Range
@@ -119,7 +216,66 @@
     }
 
     Range.prototype = {
-
+        /**
+         * @name cloneContents
+         * @grammar range.cloneContents()  => DocumentFragment
+         * @desc 克隆选中的内容到一个fragment里，如果选区是空的将返回null
+         */
+        cloneContents:function () {
+            return this.collapsed ? null : execContentsAction(this, 0);
+        },
+        /**
+         * @name deleteContents
+         * @grammar range.deleteContents()  => Range
+         * @desc 删除当前选区范围中的所有内容并返回range实例，这时的range已经变成了闭合状态
+         * @example
+         * DOM Element :
+         * <b>x<i>x[x<i>xx]x</b>
+         * //执行方法后
+         * <b>x<i>x<i>|x</b>
+         * 注意range改变了
+         * range.startContainer => b
+         * range.startOffset  => 2
+         * range.endContainer => b
+         * range.endOffset => 2
+         * range.collapsed => true
+         */
+        deleteContents:function () {
+            var txt;
+            if (!this.collapsed) {
+                execContentsAction(this, 1);
+            }
+            if (browser.webkit) {
+                txt = this.startContainer;
+                if (txt.nodeType == 3 && !txt.nodeValue.length) {
+                    this.setStartBefore(txt).collapse(true);
+                    domUtils.remove(txt);
+                }
+            }
+            return this;
+        },
+        /**
+         * @name extractContents
+         * @grammar range.extractContents()  => DocumentFragment
+         * @desc 将当前的内容放到一个fragment里并返回这个fragment，这时的range已经变成了闭合状态
+         * @example
+         * DOM Element :
+         * <b>x<i>x[x<i>xx]x</b>
+         * //执行方法后
+         * 返回的fragment里的 dom结构是
+         * <i>x<i>xx
+         * dom树上的结构是
+         * <b>x<i>x<i>|x</b>
+         * 注意range改变了
+         * range.startContainer => b
+         * range.startOffset  => 2
+         * range.endContainer => b
+         * range.endOffset => 2
+         * range.collapsed => true
+         */
+        extractContents:function () {
+            return this.collapsed ? null : execContentsAction(this, 2);
+        },
         /**
          * @name  setStart
          * @grammar range.setStart(node,offset)  => Range
@@ -312,7 +468,42 @@
             }
             return me;
         },
-
+        /**
+         * 获取当前range所在位置的公共祖先节点，当前range位置可以位于文本节点内，也可以包含整个元素节点，也可以位于两个节点之间
+         * @name  getCommonAncestor
+         * @grammar range.getCommonAncestor([includeSelf, ignoreTextNode])  => Element
+         * @example
+         * <b>xx[xx<i>xx]x</i>xxx</b> ==>getCommonAncestor() ==> b
+         * <b>[<img/>]</b>
+         * range.startContainer ==> b
+         * range.startOffset ==> 0
+         * range.endContainer ==> b
+         * range.endOffset ==> 1
+         * range.getCommonAncestor() ==> b
+         * range.getCommonAncestor(true) ==> img
+         * <b>xxx|xx</b>
+         * range.startContainer ==> textNode
+         * range.startOffset ==> 3
+         * range.endContainer ==> textNode
+         * range.endOffset ==> 3
+         * range.getCommonAncestor() ==> textNode
+         * range.getCommonAncestor(null,true) ==> b
+         */
+        getCommonAncestor:function (includeSelf, ignoreTextNode) {
+            var me = this,
+                start = me.startContainer,
+                end = me.endContainer;
+            if (start === end) {
+                if (includeSelf && selectOneNode(this)) {
+                    start = start.childNodes[me.startOffset];
+                    if(start.nodeType == 1)
+                        return start;
+                }
+                //只有在上来就相等的情况下才会出现是文本的情况
+                return ignoreTextNode && start.nodeType == 3 ? start.parentNode : start;
+            }
+            return domUtils.getCommonAncestor(start, end);
+        },
         /**
          * 调整边界容器，如果是textNode,就调整到elementNode上
          * @name trimBoundary
@@ -387,7 +578,7 @@
          * //本方法执行后
          * startContainer = <b>; startOffset = 1
          */
-        txtToElmBoundary:function (ignoreCollapsed) {
+        txtToElmBoundary:function () {
             function adjust(r, c) {
                 var container = r[c + 'Container'],
                     offset = r[c + 'Offset'];
@@ -404,7 +595,7 @@
                 }
             }
 
-            if (ignoreCollapsed || !this.collapsed) {
+            if (!this.collapsed) {
                 adjust(this, 'start');
                 adjust(this, 'end');
             }
@@ -496,7 +687,92 @@
             }
             return this;
         },
+        /**
+         * 调整range的边界，使其"放大"到最近的父block节点
+         * @name  enlarge
+         * @grammar range.enlarge()  =>  Range
+         * @example
+         * <p><span>xxx</span><b>x[x</b>xxxxx]</p><p>xxx</p> ==> [<p><span>xxx</span><b>xx</b>xxxxx</p>]<p>xxx</p>
+         */
+        enlarge:function (toBlock, stopFn) {
+            var isBody = domUtils.isBody,
+                pre, node, tmp = this.document.createTextNode('');
+            if (toBlock) {
+                node = this.startContainer;
+                if (node.nodeType == 1) {
+                    if (node.childNodes[this.startOffset]) {
+                        pre = node = node.childNodes[this.startOffset]
+                    } else {
+                        node.appendChild(tmp);
+                        pre = node = tmp;
+                    }
+                } else {
+                    pre = node;
+                }
+                while (1) {
+                    if (domUtils.isBlockElm(node)) {
+                        node = pre;
+                        while ((pre = node.previousSibling) && !domUtils.isBlockElm(pre)) {
+                            node = pre;
+                        }
+                        this.setStartBefore(node);
+                        break;
+                    }
+                    pre = node;
+                    node = node.parentNode;
+                }
+                node = this.endContainer;
+                if (node.nodeType == 1) {
+                    if (pre = node.childNodes[this.endOffset]) {
+                        node.insertBefore(tmp, pre);
+                    } else {
+                        node.appendChild(tmp);
+                    }
+                    pre = node = tmp;
+                } else {
+                    pre = node;
+                }
+                while (1) {
+                    if (domUtils.isBlockElm(node)) {
+                        node = pre;
+                        while ((pre = node.nextSibling) && !domUtils.isBlockElm(pre)) {
+                            node = pre;
+                        }
+                        this.setEndAfter(node);
+                        break;
+                    }
+                    pre = node;
+                    node = node.parentNode;
+                }
+                if (tmp.parentNode === this.endContainer) {
+                    this.endOffset--;
+                }
+                domUtils.remove(tmp);
+            }
 
+            // 扩展边界到最大
+            if (!this.collapsed) {
+                while (this.startOffset == 0) {
+                    if (stopFn && stopFn(this.startContainer)) {
+                        break;
+                    }
+                    if (isBody(this.startContainer)) {
+                        break;
+                    }
+                    this.setStartBefore(this.startContainer);
+                }
+                while (this.endOffset == (this.endContainer.nodeType == 1 ? this.endContainer.childNodes.length : this.endContainer.nodeValue.length)) {
+                    if (stopFn && stopFn(this.endContainer)) {
+                        break;
+                    }
+                    if (isBody(this.endContainer)) {
+                        break;
+                    }
+                    this.setEndAfter(this.endContainer);
+                }
+            }
+            return this;
+        },
         /**
          * 调整Range的边界，使其"缩小"到最合适的位置
          * @name adjustmentBoundary
@@ -522,7 +798,148 @@
             }
             return this;
         },
-
+        /**
+         * 给range选区中的内容添加给定的标签，主要用于inline标签
+         * @name applyInlineStyle
+         * @grammar range.applyInlineStyle(tagName)        =>  Range    //tagName为需要添加的样式标签名
+         * @grammar range.applyInlineStyle(tagName,attrs)  =>  Range    //attrs为属性json对象
+         * @desc
+         * <code type="html"><p>xxxx[xxxx]x</p>  ==>  range.applyInlineStyle("strong")  ==>  <p>xxxx[<strong>xxxx</strong>]x</p>
+         * <p>xx[dd<strong>yyyy</strong>]x</p>  ==>  range.applyInlineStyle("strong")  ==>  <p>xx[<strong>ddyyyy</strong>]x</p>
+         * <p>xxxx[xxxx]x</p>  ==>  range.applyInlineStyle("strong",{"style":"font-size:12px"})  ==>  <p>xxxx[<strong style="font-size:12px">xxxx</strong>]x</p></code>
+         */
+        applyInlineStyle:function (tagName, attrs, list) {
+            if (this.collapsed)return this;
+            this.trimBoundary().enlarge(false,
+                function (node) {
+                    return node.nodeType == 1 && domUtils.isBlockElm(node)
+                }).adjustmentBoundary();
+            var bookmark = this.createBookmark(),
+                end = bookmark.end,
+                filterFn = function (node) {
+                    return node.nodeType == 1 ? node.tagName.toLowerCase() != 'br' : !domUtils.isWhitespace(node);
+                },
+                current = domUtils.getNextDomNode(bookmark.start, false, filterFn),
+                node,
+                pre,
+                range = this.cloneRange();
+            while (current && (domUtils.getPosition(current, end) & domUtils.POSITION_PRECEDING)) {
+                if (current.nodeType == 3 || dtd[tagName][current.tagName]) {
+                    range.setStartBefore(current);
+                    node = current;
+                    while (node && (node.nodeType == 3 || dtd[tagName][node.tagName]) && node !== end) {
+                        pre = node;
+                        node = domUtils.getNextDomNode(node, node.nodeType == 1, null, function (parent) {
+                            return dtd[tagName][parent.tagName];
+                        });
+                    }
+                    var frag = range.setEndAfter(pre).extractContents(), elm;
+                    if (list && list.length > 0) {
+                        var level, top;
+                        top = level = list[0].cloneNode(false);
+                        for (var i = 1, ci; ci = list[i++];) {
+                            level.appendChild(ci.cloneNode(false));
+                            level = level.firstChild;
+                        }
+                        elm = level;
+                    } else {
+                        elm = range.document.createElement(tagName);
+                    }
+                    if (attrs) {
+                        domUtils.setAttributes(elm, attrs);
+                    }
+                    elm.appendChild(frag);
+                    range.insertNode(list ? top : elm);
+                    //处理下滑线在a上的情况
+                    var aNode;
+                    if (tagName == 'span' && attrs.style && /text\-decoration/.test(attrs.style) && (aNode = domUtils.findParentByTagName(elm, 'a', true))) {
+                        domUtils.setAttributes(aNode, attrs);
+                        domUtils.remove(elm, true);
+                        elm = aNode;
+                    } else {
+                        domUtils.mergeSibling(elm);
+                        domUtils.clearEmptySibling(elm);
+                    }
+                    //去除子节点相同的
+                    domUtils.mergeChild(elm, attrs);
+                    current = domUtils.getNextDomNode(elm, false, filterFn);
+                    domUtils.mergeToParent(elm);
+                    if (node === end) {
+                        break;
+                    }
+                } else {
+                    current = domUtils.getNextDomNode(current, true, filterFn);
+                }
+            }
+            return this.moveToBookmark(bookmark);
+        },
+        /**
+         * 对当前range选中的节点，去掉给定的标签节点，但标签中的内容保留，主要用于处理inline元素
+         * @name removeInlineStyle
+         * @grammar range.removeInlineStyle(tagNames)  => Range  //tagNames 为需要去掉的样式标签名,支持"b"或者["b","i","u"]
+         * @desc
+         * <code type="html">xx[x<span>xxx<em>yyy</em>zz]z</span>  => range.removeInlineStyle(["em"])  => xx[x<span>xxxyyyzz]z</span></code>
+         */
+        removeInlineStyle:function (tagNames) {
+            if (this.collapsed)return this;
+            tagNames = utils.isArray(tagNames) ? tagNames : [tagNames];
+            this.shrinkBoundary().adjustmentBoundary();
+            var start = this.startContainer, end = this.endContainer;
+            while (1) {
+                if (start.nodeType == 1) {
+                    if (utils.indexOf(tagNames, start.tagName.toLowerCase()) > -1) {
+                        break;
+                    }
+                    if (start.tagName.toLowerCase() == 'body') {
+                        start = null;
+                        break;
+                    }
+                }
+                start = start.parentNode;
+            }
+            while (1) {
+                if (end.nodeType == 1) {
+                    if (utils.indexOf(tagNames, end.tagName.toLowerCase()) > -1) {
+                        break;
+                    }
+                    if (end.tagName.toLowerCase() == 'body') {
+                        end = null;
+                        break;
+                    }
+                }
+                end = end.parentNode;
+            }
+            var bookmark = this.createBookmark(),
+                frag,
+                tmpRange;
+            if (start) {
+                tmpRange = this.cloneRange().setEndBefore(bookmark.start).setStartBefore(start);
+                frag = tmpRange.extractContents();
+                tmpRange.insertNode(frag);
+                domUtils.clearEmptySibling(start, true);
+                start.parentNode.insertBefore(bookmark.start, start);
+            }
+            if (end) {
+                tmpRange = this.cloneRange().setStartAfter(bookmark.end).setEndAfter(end);
+                frag = tmpRange.extractContents();
+                tmpRange.insertNode(frag);
+                domUtils.clearEmptySibling(end, false, true);
+                end.parentNode.insertBefore(bookmark.end, end.nextSibling);
+            }
+            var current = domUtils.getNextDomNode(bookmark.start, false, function (node) {
+                return node.nodeType == 1;
+            }), next;
+            while (current && current !== bookmark.end) {
+                next = domUtils.getNextDomNode(current, true, function (node) {
+                    return node.nodeType == 1;
+                });
+                if (utils.indexOf(tagNames, current.tagName.toLowerCase()) > -1) {
+                    domUtils.remove(current, true);
+                }
+                current = next;
+            }
+            return this.moveToBookmark(bookmark);
+        },
         /**
          * 得到一个自闭合的节点,常用于获取自闭和的节点，例如图片节点
          * @name  getClosedNode
@@ -640,8 +1057,8 @@
                             (!child.previousSibling || child.previousSibling.nodeType != 3)
                             :
                             (!start.lastChild || start.lastChild.nodeType != 3)
-                            )
-                        ){
+                        )
+                    ){
                         txtNode = this.document.createTextNode(fillChar);
                         //跟着前边走
                         this.insertNode(txtNode);
@@ -698,7 +1115,15 @@
             domUtils.remove(span);
             return me;
         },
-
+        inFillChar : function(){
+            var start = this.startContainer;
+            if(this.collapsed && start.nodeType == 3
+                && start.nodeValue.replace(new RegExp('^' + domUtils.fillChar),'').length + 1 == start.nodeValue.length
+                ){
+                return true;
+            }
+            return false;
+        },
         createAddress : function(ignoreEnd,ignoreTxt){
             var addr = {},me = this;
 
@@ -799,6 +1224,19 @@
             }
             return true;
 
+        },
+        traversal:function(doFn,filterFn){
+            if (this.collapsed)
+                return this;
+            var bookmark = this.createBookmark(),
+                end = bookmark.end,
+                current = domUtils.getNextDomNode(bookmark.start, false, filterFn);
+            while (current && current !== end && (domUtils.getPosition(current, end) & domUtils.POSITION_PRECEDING)) {
+                var tmpNode = domUtils.getNextDomNode(current,false,filterFn);
+                doFn(current);
+                current = tmpNode;
+            }
+            return this.moveToBookmark(bookmark);
         }
     };
 })();

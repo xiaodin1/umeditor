@@ -78,7 +78,7 @@ UE.plugins['undo'] = function () {
             me.options.autoClearEmptyNode = orgState;
             //trace:873
             //去掉展位符
-            me.body.innerHTML = root.toHtml();
+            me.document.body.innerHTML = root.toHtml();
             me.fireEvent('afterscencerestore');
             //处理undo后空格不展位的问题
             if (browser.ie) {

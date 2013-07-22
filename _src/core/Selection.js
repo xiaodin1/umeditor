@@ -5,7 +5,7 @@
 ///import core/dom/domUtils.js
 ///import core/dom/Range.js
 /**
- * @class UE.dom.Selection    Selection类
+ * @class baidu.editor.dom.Selection    Selection类
  */
 (function () {
 
@@ -113,15 +113,15 @@
         return null;
     }
 
-    var Selection = dom.Selection = function ( doc,body ) {
-        var me = this;
+    var Selection = dom.Selection = function ( doc ) {
+        var me = this, iframe;
         me.document = doc;
-        me.body = body;
         if ( ie ) {
-            domUtils.on( body, 'beforedeactivate', function () {
+            iframe = domUtils.getWindow( doc ).frameElement;
+            domUtils.on( iframe, 'beforedeactivate', function () {
                 me._bakIERange = me.getIERange();
             } );
-            domUtils.on( body, 'activate', function () {
+            domUtils.on( iframe, 'activate', function () {
                 try {
                     if ( !_getIERange( me ) && me._bakIERange ) {
                         me._bakIERange.select();
@@ -131,29 +131,21 @@
                 me._bakIERange = null;
             } );
         }
+        iframe = doc = null;
     };
 
     Selection.prototype = {
-        hasNativeRange : function(){
-            if(browser.ie9above){
-                var sel = this.getNative();
-                return sel.rangeCount
-            }else{
-                var ieRange = _getIERange( this );
-                return  ieRange && this.rangeInBody(ieRange)
-            }
-        },
         /**
          * 获取原生seleciton对象
          * @public
          * @function
-         * @name    UE.dom.Selection.getNative
+         * @name    baidu.editor.dom.Selection.getNative
          * @return {Selection}    获得selection对象
          */
         getNative:function () {
             var doc = this.document;
             try {
-                return !doc ? null : browser.ie9below ? doc.selection : domUtils.getWindow( doc ).getSelection();
+                return !doc ? null : ie ? doc.selection : domUtils.getWindow( doc ).getSelection();
             } catch ( e ) {
                 return null;
             }
@@ -162,26 +154,24 @@
          * 获得ieRange
          * @public
          * @function
-         * @name    UE.dom.Selection.getIERange
+         * @name    baidu.editor.dom.Selection.getIERange
          * @return {ieRange}    返回ie原生的Range
          */
         getIERange:function () {
             var ieRange = _getIERange( this );
-            if ( !ieRange  || !this.rangeInBody(ieRange)) {
+            if ( !ieRange ) {
                 if ( this._bakIERange ) {
                     return this._bakIERange;
                 }
             }
             return ieRange;
         },
-        rangeInBody : function(rng){
-            return domUtils.inDoc(browser.ie9below ? rng.parentElement() : rng.startContainer,this.body);
-        },
+
         /**
          * 缓存当前选区的range和选区的开始节点
          * @public
          * @function
-         * @name    UE.dom.Selection.cache
+         * @name    baidu.editor.dom.Selection.cache
          */
         cache:function () {
             this.clear();
@@ -204,7 +194,7 @@
          * 清空缓存
          * @public
          * @function
-         * @name    UE.dom.Selection.clear
+         * @name    baidu.editor.dom.Selection.clear
          */
         clear:function () {
             this._cachedStartElementPath = this._cachedRange = this._cachedStartElement = null;
@@ -224,20 +214,20 @@
          * 获取选区对应的Range
          * @public
          * @function
-         * @name    UE.dom.Selection.getRange
-         * @returns {UE.dom.Range}    得到Range对象
+         * @name    baidu.editor.dom.Selection.getRange
+         * @returns {baidu.editor.dom.Range}    得到Range对象
          */
         getRange:function () {
             var me = this;
             function optimze( range ) {
-                var child = me.body.firstChild,
+                var child = me.document.body.firstChild,
                     collapsed = range.collapsed;
                 while ( child && child.firstChild ) {
                     range.setStart( child, 0 );
                     child = child.firstChild;
                 }
                 if ( !range.startContainer ) {
-                    range.setStart( me.body, 0 )
+                    range.setStart( me.document.body, 0 )
                 }
                 if ( collapsed ) {
                     range.collapse( true );
@@ -247,11 +237,11 @@
             if ( me._cachedRange != null ) {
                 return this._cachedRange;
             }
-            var range = new dom.Range( me.document );
-            if ( browser.ie9below ) {
+            var range = new baidu.editor.dom.Range( me.document );
+            if ( ie ) {
                 var nativeRange = me.getIERange();
                 if ( nativeRange ) {
-
+                    //备份的_bakIERange可能已经实效了，dom树发生了变化比如从源码模式切回来，所以try一下，实效就放到body开始位置
                     try{
                         transformIERangeToRange( nativeRange, range );
                     }catch(e){
@@ -263,7 +253,7 @@
                 }
             } else {
                 var sel = me.getNative();
-                if ( sel && sel.rangeCount && me.rangeInBody(sel.getRangeAt( 0 ))) {
+                if ( sel && sel.rangeCount ) {
                     var firstRange = sel.getRangeAt( 0 );
                     var lastRange = sel.getRangeAt( sel.rangeCount - 1 );
                     range.setStart( firstRange.startContainer, firstRange.startOffset ).setEnd( lastRange.endContainer, lastRange.endOffset );
@@ -285,7 +275,7 @@
          * 获取开始元素，用于状态反射
          * @public
          * @function
-         * @name    UE.dom.Selection.getStart
+         * @name    baidu.editor.dom.Selection.getStart
          * @return {Element}     获得开始元素
          */
         getStart:function () {
@@ -317,6 +307,7 @@
                     }
                 }
             } else {
+                range.shrinkBoundary();
                 start = range.startContainer;
                 if ( start.nodeType == 1 && start.hasChildNodes() ){
                     start = start.childNodes[Math.min( start.childNodes.length - 1, range.startOffset )];
@@ -331,7 +322,7 @@
          * 得到选区中的文本
          * @public
          * @function
-         * @name    UE.dom.Selection.getText
+         * @name    baidu.editor.dom.Selection.getText
          * @return  {String}    选区中包含的文本
          */
         getText:function () {
@@ -341,6 +332,9 @@
                 return browser.ie ? nativeRange.text : nativeRange.toString();
             }
             return '';
+        },
+        clearRange : function(){
+            this.getNative()[browser.ie ? 'empty' : 'removeAllRanges']();
         }
     };
 })();

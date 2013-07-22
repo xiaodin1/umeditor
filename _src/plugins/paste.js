@@ -22,7 +22,7 @@ UE.plugins['paste'] = function () {
         pastebin.id = 'baidu_pastebin';
         // Safari 要求div必须有内容，才能粘贴内容进来
         browser.webkit && pastebin.appendChild(doc.createTextNode(domUtils.fillChar + domUtils.fillChar));
-        this.body.appendChild(pastebin);
+        doc.body.appendChild(pastebin);
         //trace:717 隐藏的span不能得到top
         //bk.start.innerHTML = '&nbsp;';
         bk.start.style.display = '';
@@ -54,6 +54,7 @@ UE.plugins['paste'] = function () {
 
     var me = this;
 
+    var txtContent, htmlContent, address;
 
     function filter(div) {
         var html;
@@ -112,12 +113,11 @@ UE.plugins['paste'] = function () {
             }
 
             //ie下使用innerHTML会产生多余的\r\n字符，也会产生&nbsp;这里过滤掉
-            html = div.innerHTML;//.replace(/>(?:(\s|&nbsp;)*?)</g,'><');
+            html = div.innerHTML//.replace(/>(?:(\s|&nbsp;)*?)</g,'><');
 
             //过滤word粘贴过来的冗余属性
             html = UE.filterWord(html);
-            //取消了忽略空白的第二个参数，粘贴过来的有些是有空白的，会被套上相关的标签
-            var root = UE.htmlparser(html);
+            var root = UE.htmlparser(html,true);
             //如果给了过滤规则就先进行过滤
             if (me.options.filterRules) {
                 UE.filterNode(root, me.options.filterRules);
@@ -142,13 +142,114 @@ UE.plugins['paste'] = function () {
             if(!html.html){
                 return;
             }
-
-            me.execCommand('insertHtml', html.html, true);
+            root = UE.htmlparser(html.html,true);
+            //如果开启了纯文本模式
+            if (me.queryCommandState('pasteplain') === 1) {
+                me.execCommand('insertHtml', UE.filterNode(root, me.options.filterTxtRules).toHtml(), true);
+            } else {
+                //文本模式
+                UE.filterNode(root, me.options.filterTxtRules);
+                txtContent = root.toHtml();
+                //完全模式
+                htmlContent = html.html;
+                address = me.selection.getRange().createAddress(true);
+                me.execCommand('insertHtml', htmlContent, true);
+            }
             me.fireEvent("afterpaste", html);
         }
     }
 
+    me.addListener('pasteTransfer', function (cmd, plainType) {
+        if (address && txtContent && htmlContent && txtContent != htmlContent) {
+            var range = me.selection.getRange();
+            range.moveToAddress(address, true);
+            if (!range.collapsed) {
 
+                while (!domUtils.isBody(range.startContainer)
+                    ) {
+                    var start = range.startContainer;
+                    if(start.nodeType == 1){
+                        start = start.childNodes[range.startOffset];
+                        if(!start){
+                            range.setStartBefore(range.startContainer);
+                            continue;
+                        }
+                        var pre = start.previousSibling;
+
+                        if(pre && pre.nodeType == 3 && new RegExp('^[\n\r\t '+domUtils.fillChar+']*$').test(pre.nodeValue)){
+                            range.setStartBefore(pre)
+                        }
+                    }
+                    if(range.startOffset == 0){
+                        range.setStartBefore(range.startContainer);
+                    }else{
+                        break;
+                    }
+
+                }
+                while (!domUtils.isBody(range.endContainer)
+                    ) {
+                    var end = range.endContainer;
+                    if(end.nodeType == 1){
+                        end = end.childNodes[range.endOffset];
+                        if(!end){
+                            range.setEndAfter(range.endContainer);
+                            continue;
+                        }
+                        var next = end.nextSibling;
+                        if(next && next.nodeType == 3 && new RegExp('^[\n\r\t'+domUtils.fillChar+']*$').test(next.nodeValue)){
+                            range.setEndAfter(next)
+                        }
+                    }
+                    if(range.endOffset == range.endContainer.childNodes.length){
+                        range.setEndAfter(range.endContainer);
+                    }else{
+                        break;
+                    }
+
+                }
+
+            }
+            range.deleteContents();
+            range.select(true);
+            me.__hasEnterExecCommand = true;
+            var html = htmlContent;
+            if (plainType === 2) {
+                html = html.replace(/<(\/?)([\w\-]+)([^>]*)>/gi, function (a, b, tagName, attrs) {
+                    tagName = tagName.toLowerCase();
+                    if ({img: 1}[tagName]) {
+                        return a;
+                    }
+                    attrs = attrs.replace(/([\w\-]*?)\s*=\s*(("([^"]*)")|('([^']*)')|([^\s>]+))/gi, function (str, atr, val) {
+                        if ({
+                            'src': 1,
+                            'href': 1,
+                            'name': 1
+                        }[atr.toLowerCase()]) {
+                            return atr + '=' + val + ' '
+                        }
+                        return ''
+                    });
+                    if ({
+                        'span': 1,
+                        'div': 1
+                    }[tagName]) {
+                        return ''
+                    } else {
+
+                        return '<' + b + tagName + ' ' + utils.trim(attrs) + '>'
+                    }
+
+                });
+            } else if (plainType) {
+                html = txtContent;
+            }
+            me.execCommand('inserthtml', html, true);
+            me.__hasEnterExecCommand = false;
+            var tmpAddress = me.selection.getRange().createAddress(true);
+            address.endAddress = tmpAddress.startAddress;
+        }
+    });
     me.addListener('ready', function () {
         domUtils.on(me.body, 'cut', function () {
             var range = me.selection.getRange();

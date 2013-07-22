@@ -423,7 +423,7 @@
             } else {
                 exec(name, val)
             }
-            this.setAttr('style', utils.trim(cssStyle))
+            this.setAttr('style', cssStyle)
         },
         traversal:function(fn){
             if(this.children && this.children.length){

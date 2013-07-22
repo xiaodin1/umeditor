@@ -5,7 +5,7 @@
 /**
  * 预览
  * @function
- * @name UE.execCommand
+ * @name baidu.editor.execCommand
  * @param   {String}   cmdName     preview预览编辑器内容
  */
 UE.commands['preview'] = {

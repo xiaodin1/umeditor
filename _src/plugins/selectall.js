@@ -5,7 +5,7 @@
 /**
  * 选中所有
  * @function
- * @name UE.execCommand
+ * @name baidu.editor.execCommand
  * @param   {String}   cmdName    selectall选中编辑器里的所有内容
  * @author zhanyi
 */
