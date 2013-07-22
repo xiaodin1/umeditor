@@ -64,6 +64,7 @@
             'plugins/table.cmds.js',
             'plugins/table.action.js',
 //            'plugins/contextmenu.js',
+            'plugins/shortcutmenu.js',
             'plugins/basestyle.js',
             'plugins/elementpath.js',
             'plugins/formatmatch.js',

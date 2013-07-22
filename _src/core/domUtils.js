@@ -970,6 +970,10 @@ var domUtils = dom.domUtils = {
      */
     removeStyle:function (element, name) {
         if(browser.ie ){
+            //针对color先单独处理一下
+            if(name == 'color'){
+                name = '(^|;)' + name;
+            }
             element.style.cssText = element.style.cssText.replace(new RegExp(name + '[^:]*:[^;]+;?','ig'),'')
         }else{
             if (element.style.removeProperty) {
@@ -1175,6 +1179,8 @@ var domUtils = dom.domUtils = {
         return flag && !domUtils.isBody(tmpRange.startContainer) ? 1 : 0;
     },
     isEmptyBlock:function (node,reg) {
+        if(node.nodeType != 1)
+            return 0;
         reg = reg || new RegExp('[ \t\r\n' + domUtils.fillChar + ']', 'g');
         if (node[browser.ie ? 'innerText' : 'textContent'].replace(reg, '').length > 0) {
             return 0;
@@ -1223,7 +1229,7 @@ var domUtils = dom.domUtils = {
         return node.nodeType == 1 && node.getAttribute('_ue_custom_node_');
     },
     isTagNode:function (node, tagName) {
-        return node.nodeType == 1 && new RegExp(node.tagName,'i').test(tagName)
+        return node.nodeType == 1 && new RegExp('^' + node.tagName + '$','i').test(tagName)
     },
     /**
      * 对于nodelist用filter进行过滤

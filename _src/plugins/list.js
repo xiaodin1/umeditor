@@ -136,27 +136,31 @@ UE.plugins['list'] = function () {
         domUtils.on(me.body,'cut',function(){
             setTimeout(function(){
                 var rng = me.selection.getRange(),li;
-                if(li = domUtils.findParentByTagName(rng.startContainer,'li',true)){
-                    if(!li.nextSibling && domUtils.isEmptyBlock(li)){
-                        var pn = li.parentNode,node;
-                        if(node = pn.previousSibling){
-                            domUtils.remove(pn);
-                            rng.setStartAtLast(node).collapse(true);
-                            rng.select(true);
-                        }else if(node = pn.nextSibling){
-                            domUtils.remove(pn);
-                            rng.setStartAtFirst(node).collapse(true);
-                            rng.select(true);
-                        }else{
-                            var tmpNode = me.document.createElement('p');
-                            domUtils.fillNode(me.document,tmpNode);
-                            pn.parentNode.insertBefore(tmpNode,pn);
-                            domUtils.remove(pn);
-                            rng.setStart(tmpNode,0).collapse(true);
-                            rng.select(true);
+                //trace:3416
+                if(!rng.collapsed){
+                    if(li = domUtils.findParentByTagName(rng.startContainer,'li',true)){
+                        if(!li.nextSibling && domUtils.isEmptyBlock(li)){
+                            var pn = li.parentNode,node;
+                            if(node = pn.previousSibling){
+                                domUtils.remove(pn);
+                                rng.setStartAtLast(node).collapse(true);
+                                rng.select(true);
+                            }else if(node = pn.nextSibling){
+                                domUtils.remove(pn);
+                                rng.setStartAtFirst(node).collapse(true);
+                                rng.select(true);
+                            }else{
+                                var tmpNode = me.document.createElement('p');
+                                domUtils.fillNode(me.document,tmpNode);
+                                pn.parentNode.insertBefore(tmpNode,pn);
+                                domUtils.remove(pn);
+                                rng.setStart(tmpNode,0).collapse(true);
+                                rng.select(true);
+                            }
                         }
                     }
                 }
+
             })
         })
     });
@@ -229,6 +233,17 @@ UE.plugins['list'] = function () {
             if(tmpP.firstChild() && !tmpP.parentNode || !li.firstChild()){
                 li.appendChild(tmpP);
             }
+            //trace:3357
+            //p不能为空
+            if (!tmpP.firstChild()) {
+                tmpP.innerHTML(browser.ie ? '&nbsp;' : '<br/>')
+            }
+            //去掉末尾的空白
+            var p = li.firstChild();
+            var lastChild = p.lastChild();
+            if(lastChild && lastChild.type == 'text' && /^\s*$/.test(lastChild.data)){
+                p.removeChild(lastChild)
+            }
         });
         var orderlisttype = {
                 'num1':/^\d+\)/,
@@ -262,10 +277,22 @@ UE.plugins['list'] = function () {
             if(node.getAttr('class') != 'MsoListParagraph'){
                 return
             }
+
+            //word粘贴过来的会带有margin要去掉,但这样也可能会误命中一些央视
+            node.setStyle('margin','');
+            node.setStyle('margin-left','');
             node.setAttr('class','');
+
             function appendLi(list,p,type){
                 if(list.tagName == 'ol'){
-                    p.innerHTML(p.innerHTML().replace(orderlisttype[type],''));
+                    if(browser.ie){
+                        var first = p.firstChild();
+                        if(first.type =='element' && first.tagName == 'span' && orderlisttype[type].test(first.innerText())){
+                            p.removeChild(first);
+                        }
+                    }else{
+                        p.innerHTML(p.innerHTML().replace(orderlisttype[type],''));
+                    }
                 }else{
                     p.removeChild(p.firstChild())
                 }
@@ -274,7 +301,7 @@ UE.plugins['list'] = function () {
                 li.appendChild(p);
                 list.appendChild(li);
             }
-            var tmp = node,type;
+            var tmp = node,type,cacheNode = node;
 
             if(node.parentNode.tagName != 'li' && (type = checkListType(node.innerText(),node))){
 
@@ -295,6 +322,10 @@ UE.plugins['list'] = function () {
                 if(!list.parentNode && node && node.parentNode){
                     node.parentNode.insertBefore(list,node)
                 }
+            }
+            var span = cacheNode.firstChild();
+            if(span && span.type == 'element' && span.tagName == 'span' && /^\s*(&nbsp;)+\s*$/.test(span.innerText())){
+                span.parentNode.removeChild(span)
             }
         })
     });

@@ -90,9 +90,15 @@
      * @return {Object}
      */
     UETable.getTableItemsByRange = function (editor) {
-        var start = editor.selection.getStart(),
+        var start = editor.selection.getStart();
+
+        //ff下会选中bookmark
+        if( start && start.id && start.id.indexOf('_baidu_bookmark_start_') === 0 ) {
+            start = start.nextSibling;
+        }
+
         //在table或者td边缘有可能存在选中tr的情况
-            cell = start && domUtils.findParentByTagName(start, ["td", "th"], true),
+        var cell = start && domUtils.findParentByTagName(start, ["td", "th"], true),
             tr = cell && cell.parentNode,
             caption = start && domUtils.findParentByTagName(start, 'caption', true),
             table = caption ? caption.parentNode : tr && tr.parentNode.parentNode;
@@ -164,7 +170,7 @@
         return tdOrTable.ueTable;
     };
 
-    UETable.cloneCell = function(cell,ignoreMerge,ignoreWidth){
+    UETable.cloneCell = function(cell,ignoreMerge,keepPro){
         if (!cell || utils.isString(cell)) {
             return this.table.ownerDocument.createElement(cell || 'td');
         }
@@ -174,6 +180,10 @@
         if (ignoreMerge) {
             tmpCell.rowSpan = tmpCell.colSpan = 1;
         }
+        //去掉宽高
+        !keepPro && domUtils.removeAttributes(tmpCell,'width height');
+        !keepPro && domUtils.removeAttributes(tmpCell,'style');
+
         tmpCell.style.borderLeftStyle = "";
         tmpCell.style.borderTopStyle = "";
         tmpCell.style.borderLeftColor = cell.style.borderRightColor;
@@ -181,7 +191,6 @@
         tmpCell.style.borderTopColor = cell.style.borderBottomColor;
         tmpCell.style.borderTopWidth = cell.style.borderBottomWidth;
         flag && domUtils.addClass(cell, "selectTdClass");
-        ignoreWidth && domUtils.removeAttributes(tmpCell,'width height');
         return tmpCell;
     }
 
@@ -547,7 +556,7 @@
 
                 return checkRange(beginRowIndex, beginColIndex, endRowIndex, endColIndex);
             } catch (e) {
-                if (debug) throw e;
+                //throw e;
             }
         },
         /**
@@ -756,10 +765,9 @@
             //首行直接插入,无需考虑部分单元格被rowspan的情况
             if (rowIndex == 0 || rowIndex == this.rowsNum) {
                 for (var colIndex = 0; colIndex < numCols; colIndex++) {
-                    cell = this.cloneCell(sourceCell, true,true);
+                    cell = this.cloneCell(sourceCell, true);
                     this.setCellContent(cell);
                     cell.getAttribute('vAlign') && cell.setAttribute('vAlign', cell.getAttribute('vAlign'));
-
                     row.appendChild(cell);
                 }
             } else {
@@ -772,10 +780,8 @@
                         cell = this.getCell(cellInfo.rowIndex, cellInfo.cellIndex);
                         cell.rowSpan = cellInfo.rowSpan + 1;
                     } else {
-                        cell = this.cloneCell(sourceCell, true,true);
-
+                        cell = this.cloneCell(sourceCell, true);
                         this.setCellContent(cell);
-
                         row.appendChild(cell);
                     }
                 }
@@ -899,8 +905,9 @@
                         cell = this.cloneCell(sourceCell, true);//tableRow.insertCell(cellInfo.cellIndex);
                         this.setCellContent(cell);
                         cell.setAttribute('vAlign', cell.getAttribute('vAlign'));
-                        preCell && cell.setAttribute('width', preCell.getAttribute('width'))
-                        tableRow.insertBefore(cell, preCell);
+                        preCell && cell.setAttribute('width', preCell.getAttribute('width'));
+                        //防止IE下报错
+                        preCell ? tableRow.insertBefore(cell, preCell) : tableRow.appendChild(cell);
                     }
                     replaceTdToTh(rowIndex, cell, tableRow);
                 }

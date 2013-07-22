@@ -28,7 +28,7 @@ UE.plugins['searchreplace'] = function(){
                     casesensitive : false,
                     dir : 1
                 },true);
-
+            var searchStr = opt.searchStr;
             if(browser.ie){
                 me.focus();
                 while(1){
@@ -54,12 +54,22 @@ UE.plugins['searchreplace'] = function(){
                     }
                     nativeRange = tmpRange.duplicate();
 
-
-
-                    if(!tmpRange.findText(opt.searchStr,opt.dir,opt.casesensitive ? 4 : 0)){
+                    if(/^\/[^/]+\/\w*$/.test(opt.searchStr)){
+                        var str = tmpRange.text,
+                            reg = new RegExp(opt.searchStr.replace(/^\/|\/\w*$/g,''),'g' + (opt.casesensitive ? '':'i'));
+                        var match = str.match(reg);
+                        if(match && match.length){
+                            searchStr = opt.dir < 0 ? match[match.length -1] : match[0];
+                        }else{
+                            currentRange = null;
+                            return num;
+                        }
+                    }
+                    if(!tmpRange.findText(searchStr,opt.dir,opt.casesensitive ? 4 : 0)){
                         currentRange = null;
                         tmpRange = me.document.selection.createRange();
                         tmpRange.scrollIntoView();
+                        currentRange = null;
                         return num;
                     }
                     tmpRange.select();
@@ -76,7 +86,8 @@ UE.plugins['searchreplace'] = function(){
                     }
                 }
             }else{
-                var w = me.window,nativeSel = sel.getNative(),tmpRange;
+
+                var w = me.window,nativeSel = sel.getNative();
                 while(1){
                     if(opt.all){
                         if(currentRange){
@@ -100,10 +111,7 @@ UE.plugins['searchreplace'] = function(){
                         }
                         var nativeSel = w.getSelection();
                         if(!nativeSel.rangeCount){
-                            nativeRange = me.document.createRange();
-                            nativeRange.setStart(me.body,0);
-                            nativeRange.collapse(true);
-                            nativeSel.addRange(nativeRange);
+                            nativeRange = currentRange || me._bakNativeRange;
                         }else{
                             nativeRange = nativeSel.getRangeAt(0);
                         }
@@ -122,8 +130,31 @@ UE.plugins['searchreplace'] = function(){
                     }else{
                         nativeSel.removeAllRanges();
                     }
+                    //是正则查找
 
-                    if(!w.find(opt.searchStr,opt.casesensitive,opt.dir < 0 ? true : false) ) {
+                    if(/^\/[^/]+\/\w*$/.test(opt.searchStr)){
+                        var tmpRange = nativeRange.cloneRange();
+                        //向前查找
+                        if(opt.dir < 0 ){
+                            nativeRange.collapse(true);
+                            nativeRange.setStart(me.body,0);
+                        }else{
+                            nativeRange.setEnd(me.body,me.body.childNodes.length);
+                        }
+                        var str = nativeRange + '',
+                            reg = new RegExp(opt.searchStr.replace(/^\/|\/\w*$/g,''),'g' + (opt.casesensitive ? '':'i'));
+                        var match = str.match(reg);
+                        if(match && match.length){
+                            searchStr = opt.dir < 0 ? match[match.length -1] : match[0];
+                        }else{
+                            currentRange = null;
+                            return num;
+                        }
+                        nativeSel.removeAllRanges();
+                        nativeRange = tmpRange;
+                        nativeSel.addRange(nativeRange);
+                    }
+                    if(!w.find(searchStr,opt.casesensitive,opt.dir < 0 ? true : false) ) {
                         currentRange = null;
                         nativeSel.removeAllRanges();
                         return num;
@@ -138,8 +169,9 @@ UE.plugins['searchreplace'] = function(){
                             range.insertNode(text);
                             range.selectNode(text);
                             nativeSel.addRange(range);
-                            currentRange = range.cloneRange();
+
                         }
+                        currentRange = range.cloneRange();
                     }
                     num++;
                     if(!opt.all){

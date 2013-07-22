@@ -3,9 +3,11 @@
 
 UE.plugins['defaultfilter'] = function () {
     var me = this;
+    me.setOpt('allowDivTransToP',true);
     //默认的过滤处理
     //进入编辑器的内容处理
     me.addInputRule(function (root) {
+        var allowDivTransToP = this.options.allowDivTransToP;
         var val;
         //进行默认的处理
         root.traversal(function (node) {
@@ -57,14 +59,15 @@ UE.plugins['defaultfilter'] = function () {
                             node.setAttr('align');
                             node.setStyle('text-align', val)
                         }
-                        var cssStyle = node.getAttr('style');
-                        if (cssStyle) {
-                            cssStyle = cssStyle.replace(/(margin|padding)[^;]+/g, '');
-                            node.setAttr('style', cssStyle)
-
-                        }
+                        //trace:3431
+//                        var cssStyle = node.getAttr('style');
+//                        if (cssStyle) {
+//                            cssStyle = cssStyle.replace(/(margin|padding)[^;]+/g, '');
+//                            node.setAttr('style', cssStyle)
+//
+//                        }
                         if (!node.firstChild()) {
-                            node.innerHTML(UE.browser.ie ? '&nbsp;' : '<br>')
+                            node.innerHTML(browser.ie ? '&nbsp;' : '<br/>')
                         }
                         break;
                     case 'div':
@@ -74,6 +77,9 @@ UE.plugins['defaultfilter'] = function () {
                         //针对代码这里不处理插入代码的div
                         val = node.getAttr('class');
                         if(val && /^line number\d+/.test(val)){
+                            break;
+                        }
+                        if(!allowDivTransToP){
                             break;
                         }
                         var tmpNode, p = UE.uNode.createElement('p');
@@ -166,6 +172,7 @@ UE.plugins['defaultfilter'] = function () {
                                 '_src': ''
                             })
                         }
+
 
                 }
             }
