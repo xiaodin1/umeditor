@@ -204,6 +204,8 @@
                 container = document.getElementById(container);
             }
             if (container) {
+                me.initialCont(container);
+
                 if(options.initialFrameWidth){
                     options.minFrameWidth = options.initialFrameWidth
                 }else{
@@ -259,6 +261,34 @@
                     }
                 })
             }
+        },
+        initialCont : function(holder){
+
+            if(holder){
+                holder.getAttribute('name') && ( this.options.textarea = holder.getAttribute('name'));
+                if (holder && /script|textarea/ig.test(holder.tagName)) {
+                    var newDiv = document.createElement('div');
+                    holder.parentNode.insertBefore(newDiv, holder);
+                    this.options.initialContent = UE.htmlparser(holder.value || holder.innerHTML|| this.options.initialContent).toHtml();
+                    holder.className && (newDiv.className = holder.className);
+                    holder.style.cssText && (newDiv.style.cssText = holder.style.cssText);
+
+                    if (/textarea/i.test(holder.tagName)) {
+                        this.textarea = holder;
+                        this.textarea.style.display = 'none';
+
+                    } else {
+                        holder.parentNode.removeChild(holder);
+                        holder.id && (newDiv.id = holder.id);
+                    }
+                    holder = newDiv;
+                    holder.innerHTML = '';
+                }
+                return holder;
+            }else{
+                return null;
+            }
+
         },
         /**
          * 编辑器初始化
