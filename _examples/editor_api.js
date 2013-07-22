@@ -93,7 +93,7 @@
             'adapter/ready.js',
             'adapter/button.js',
             'adapter/fullscreen.js',
-//            'adapter/font.js',
+            'adapter/font.js',
             'adapter/dialog.js',
             'adapter/popup.js',
             'adapter/autoheight.js',

@@ -4,7 +4,6 @@
 
 
 UE.registerUI('fontfamily', function( name ) {
-
     var me = this,
         fontLabel = (me.options.labelMap && me.options.labelMap[name]) || me.getLang("labelMap." + name),
         options = {
