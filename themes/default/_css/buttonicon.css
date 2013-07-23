@@ -118,3 +118,6 @@
 .edui-btn-toolbar .edui-btn .edui-icon-removeformat {
     background-position: -580px 0;
 }
+.edui-btn-toolbar .edui-btn .edui-icon-autotypeset {
+    background-position:-640px -40px;
+}
